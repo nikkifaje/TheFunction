@@ -1,3 +1,4 @@
+--:BEGINHEAD--
 USE [EfficiencyDev]
 GO
 
@@ -59,7 +60,9 @@ RETURN (
 	Change Log:				Please see the end of file.
 
 	********************************************************************************************************/
+--:ENDHEAD--
 	
+--:BEGINBODY--
 	WITH
 	
 	/*********************************************************
@@ -1475,21 +1478,25 @@ RETURN (
 
 
 	EMPTYCTE AS (SELECT NULL AS 'Empty')
+	--:ENDBODY--
 
+	
+	--:BEGINMAINQUERY--
 	/*********************************************************
-
 		Start of main output query
-		
 	*********************************************************/
+	
 
 	SELECT DISTINCT
 		*
 	FROM
 		--Member Account and Name Information
 		InitMembersCTE
+
 		LEFT OUTER JOIN InitMemberContactsCTE
 			ON (@Lens LIKE '%:Members/Contacts/%') 
 				AND InitMembersCTE.ACCOUNTNUMBER = InitMemberContactsCTE.ContactParentAccount
+		
 		LEFT OUTER JOIN InitMembersNameTypesCTE
 			ON	(@Lens LIKE '%:Members/Names/%')
 				AND InitMembersCTE.AccountNumber = InitMembersNameTypesCTE.NameTypeParentAccount
@@ -1563,7 +1570,9 @@ RETURN (
 
 
 
+		--:ENDMAINQUERY--
 
+		--:BEGINTESTS--
 
 
 
@@ -1589,7 +1598,6 @@ RETURN (
 		*/
 
 
-)
 
 
 
@@ -1750,19 +1758,15 @@ RETURN (
 */
 
 
+--:ENDTESTS--
 
 
 
 
 
 
-
-
-
-
-
-
-
+--:BEGINFOOTER--
+)
 GO
-
+--:ENDFOOTER--
 

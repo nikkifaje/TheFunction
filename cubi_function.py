@@ -1,21 +1,92 @@
 import re
+import os
+import datetime
+import cubi
+
+#working idea
+def replace_chars(item, replace_chars_dictionary):
+    #strip_items_dictionary = {'(':'', ')':'', ',':''}
+    
+    alter_item = item
+    for strip_chars in replace_chars_dictionary:
+        if strip_chars in alter_item:
+            alter_item = alter_item.replace(strip_chars, replace_chars_dictionary[strip_chars])
+
+    return alter_item
 
 
-def query_function(lens = 'NULL', output = 'NULL'):
-
-    """Returns standardized data for or from SQL."""
+def query_variable_search(sql_file_path, sql_file_name, cubi_formatted ='N'):
 
     try:
-        print('Begin')
+        file = os.path.join(str(sql_file_path), str(sql_file_name))
         file_location = r'C:\Python34\VirtualEnvs\CUBITest\TheFunction\ACUFunction.sql'
-        read_file_string = open(file_location).read()
-       
-        
-        #print(file)
-        
-        sql_function_head = '''
+        read_file_string = open(file).read()
 
-            USE [EfficiencyDev]
+        if cubi_formatted.upper() == 'Y':
+            read_file_string = re.split(r'--:BEGINHEAD--|--:ENDHEAD--', read_file_string)[1]
+            
+        strip_items_dictionary = {'(':'', ')':'', ',':''}
+
+        ##Capture all variables that need to be declared in sql function
+        read_file_list = read_file_string.split('\n')
+        variables_dictionary = {}
+        for line in read_file_list:
+            word_list = line.split()
+            for list_index, word in enumerate(word_list):
+                if '@' in word:
+                    word_alter = word
+                    for strip_item in strip_items_dictionary:
+                        if strip_item in word_alter:
+                            word_alter = word_alter.replace(strip_item, strip_items_dictionary[strip_item])
+                        else:
+                            continue
+                    if cubi_formatted.upper() == 'Y':
+                        variables_dictionary[word_alter] = word_list[list_index +1]
+                    else:
+                        variables_dictionary[word_alter] = 'Needs Cubi Formatting'
+        '''
+        variable_match_count = 0
+        for line in read_file_list:
+            word_list = line.split()
+            while variable_match_count < len(variables_dictionary):
+                for list_index, word in enumerate(word_list):
+                    if '@' in word:
+                        word_alter = word
+                        for strip_item in strip_items_dictionary:
+                            if strip_item in word_alter:
+                                word_alter = word_alter.replace(strip_item, strip_items_dictionary[strip_item])
+                            else:
+                                continue
+                            
+                        variable_match_count += 1
+                        variables_dictionary[word_alter] = word_list[list_index +1]
+        '''                
+            
+
+        #read_file_string.close()
+        
+        return variables_dictionary
+
+    except Exception as ex:
+        raise
+
+    finally:
+        pass
+
+
+
+def build_query_item(sql_file_path, sql_file_name):
+    """Return an output item of a query"""
+
+    try:
+        file = os.path.join(str(sql_file_path), str(sql_file_name))
+        #file_location = r'C:\Python34\VirtualEnvs\CUBITest\TheFunction\ACUFunction.sql'
+        read_file_string = open(file).read()
+
+        sql_table_valued_function_variables = None
+        sql_table_valued_function_head = '''
+
+            USE [{0}][EfficiencyDev]
             GO
             SET ANSI_NULLS ON
             GO
@@ -23,7 +94,7 @@ def query_function(lens = 'NULL', output = 'NULL'):
             SET QUOTED_IDENTIFIER ON
             GO
 
-            CREATE FUNCTION [dbo].[ufn_ArrowheadCU_Members_ALPHA] (
+            CREATE FUNCTION [dbo].[{1}][ufn_ArrowheadCU_Members_ALPHA] (
 	        @Lens VARCHAR(50) = 'Init'
 	        ,@StartDate DATE = NULL
 	        ,@EndDate DATE = NULL
@@ -34,24 +105,54 @@ def query_function(lens = 'NULL', output = 'NULL'):
             AS
 
             RETURN (
-        '''
+        '''.format(1,2)
+            
+        sql_query_file_function = None
+    except:
+        pass
 
-        results_head = '''
-            DECLARE
-            SET
-            DECLARE
-            SET
-        '''
 
-        strip_items_dictionary = {'(':'', ')':'', ',':''}
+
 
         
-        #Capture all definitions that need to be declared in sql function
+
+
+
+def query_function(input_sql_file_path
+                   ,input_sql_file_name
+                   ,server = 'ACUREPORTS\ACUREPORTS'
+                   ,database = 'EfficiencyDev'
+                   ,lens = 'None'
+                   ,output = 'NULL'
+                   ,output_format = 'Dictionary'
+                   ,is_temp = True
+                   ,output_sql_file_path = None):
+    """Doing some fancy string manipulations to Return standardized data for or from SQL."""
+
+    try:
+        file = os.path.join(str(input_sql_file_path), str(input_sql_file_name))
+        #file_location = r'C:\Python34\VirtualEnvs\CUBITest\TheFunction\ACUFunction.sql'
+        read_file_string = open(file).read()
+
+
+        ##Break out sql file into appropriate parts for synthesis
+        sql_output_head = re.split(r'--:BEGINHEAD--|--:ENDHEAD--', read_file_string)[1]
+        sql_output_body = re.split(r'--:BEGINBODY--|--:ENDBODY--', read_file_string)[1]
+        sql_output_main_query = re.split(r'--:BEGINMAINQUERY--|--:ENDMAINQUERY--', read_file_string)[1]
+        sql_output_test = re.split(r'--:BEGINTESTS--|--:ENDTESTS--', read_file_string)[1]
+        sql_output_footer = re.split(r'--:BEGINFOOTER--|--:ENDFOOTER--', read_file_string)[1]
+        sql_left_join_list = sql_output_main_query.split('LEFT OUTER JOIN')     #Extracts the left join sets in main query of sql
+
+
+        variables_dictionary = query_variable_search(input_sql_file_path, input_sql_file_name, cubi_formatted ='Y')
+
+            
+        '''
+        ##Capture all variables that need to be declared in sql function
         read_file_list = read_file_string.split('\n')
         variables_dictionary = {}
         for line in read_file_list:
             word_list = line.split()
-            strip_items_dictionary = {'(':'', ')':'', ',':''}
             for word in word_list:
                 if '@' in word:
                     word_alter = word
@@ -61,33 +162,144 @@ def query_function(lens = 'NULL', output = 'NULL'):
                         else:
                             continue
                     variables_dictionary[word_alter] = None
-        print(variables_dictionary)
+        '''
 
 
-        #Build output sql query for relevant lens paramters to optimize final query
-        #execution. Read through eac set of LEFT OUTER JOINS and build requested
-        #select statement accoring to string format parameter
-        sql_output_list = read_file_string.split(':BEGINOUTPUT')
-        sql_left_join_list = sql_output_list[1].split('LEFT OUTER JOIN')
+
+
+
+        
+        '''
+        Build output sql query for relevant lens paramters to optimize final query
+        execution. Read through eac set of LEFT OUTER JOINS and build requested
+        select statement accoring to string format parameter
+        '''
+        
+        # Build list of available SQL Lens parameters 
+        lens_parameters_list = []       ##Use this to display available parameters
+
         for left_join_group in sql_left_join_list[0:5]:
-            #print(repr(left_join_group))
             words_list = re.split(r' |\n*', left_join_group)
-            #print(repr(word))
-            #for word in left_join_group.re.split(r'\s*', word):
             for word in words_list:
                 if "'%:" in word:
-                    print(repr(word))
-            #print('LEFT OUTER JOIN '+join_group)
-            
+                    clean_word = re.sub(r"\)|\%|\'|\(", '', word)
+                    lens_parameters_list.append(clean_word)
+        print(lens_parameters_list)
         
-        if output.upper() == 'GETRESULTS':
-            pass
+        lens_list = [lens_set.split('/') for lens_set in lens.split(':')]     #Split input lens parameter and compare appropriate combos to sql parameter
+        optimized_sql_output_main_query = sql_left_join_list[0]     #Variable to build the main query outout that occurs after CTE declarations. Variable initialized with the SELECT statement and base table
+        for parameter_item in lens_list:
+            lens_string_build = ''          #Variable to build all available lens calls from pythons input lens parameter. Acts similar to SQL 'LIKE' statement 
+            comment_sql_join_temp_list = []
+            for word_item in parameter_item:
+                lens_string_build += word_item + '/'
+                lens_item_comparision = '%:{0}%'.format(lens_string_build) 
+                ##Begin to build main query output by commenting unwanted LEFT JOINS according to python lens parameter
+                for left_join_item in sql_left_join_list[1:]:
+                    add_sql_join_string = 'LEFT OUTER JOIN' + left_join_item
+                    if lens_item_comparision in left_join_item:
+                        optimized_sql_output_main_query += add_sql_join_string
+                    ''' Consider how to add a commented section to output
+                    else:
+                        comment_sql_join_temp_list.append(add_sql_join_string)
+            for comment_item in comment_sql_join_temp_list:
+                if comment_item not in optimized_sql_output_main_query:
+                    optimized_sql_output_main_query += '/* \n{0}\n*/\n'.format(comment_item)
+            '''
+                    
 
-        if output.upper() == 'GETQUERY':
-            pass
+        # Build unique query name to identify item being used
+        dttime = datetime.datetime.now().timetuple()
+        time_name = ''
+        for n, t in enumerate(dttime[0:7]):
+            time_name += str(dttime[n])     ##Build datetime from tuple YYYYMMDDHMMSS
+        query_name = re.sub(r'\.sql|\.txt', '', input_sql_file_name) + replace_chars(lens, {'/':'_', ':':'__'}) + '_' + time_name
 
+        # Insert TEMP prefix that will enable a deletion process for all temp functions
+        if is_temp == True:
+            query_name = 'TEMP_'+query_name
+        print(query_name)
+
+        # Set up full query shell that will run through specified output workflow
+        query_header = ''
+        query_footer = ''
+
+        # Create specified query outputs by dynamically building query header, and footer
+        if output.upper() == 'GETRESULTSET':
+            for parameter in variables_dictionary:
+                query_header += 'DECLARE {0} {1}\nSET {0} = {2}\n'.format(parameter
+                                                                          ,variables_dictionary[parameter]                                                                          ,'NULL')
         if output.upper() == 'GETFUNCTION':
-            pass
+            function_variables_string = ''
+            for function_number, parameter in enumerate(variables_dictionary):
+                function_comma = ','
+                if function_number == 0:
+                    function_comma =''
+                function_variables_string += '{0} {1} {2} = {3}\n'.format(function_comma
+                                                                     ,parameter
+                                                                     ,variables_dictionary[parameter]
+                                                                     ,'NULL')
+            query_header = '''
+                USE {0}
+                GO
+                SET ANSI_NULLS ON
+                GO
+
+                SET QUOTED_IDENTIFIER ON
+                GO
+
+                CREATE FUNCTION dbo.{1} (
+                    {2}
+                )
+
+                RETURNS TABLE
+                AS
+                RETURN (
+    
+            '''.format(database, query_name, function_variables_string)
+
+            query_footer = ')\nGO'
+
+
+
+        full_query =  '''
+                \n--:BEGINHEAD--\n{0}\n--:ENDHEAD--\n
+                \n--:BEGINBODY--\n{1}\n--:ENDBODY--\n
+                \n--:BEGINMAINQUERY--\n{2}\n--:ENDMAINQUERY--\n
+                \n--:BEGINFOOTER--\n{3}\n--:ENDFOOTER--\n
+        '''.format( query_header
+                    ,'' #sql_output_body
+                    ,optimized_sql_output_main_query
+                    ,query_footer)
+
+
+        '''
+        Execute full_query according to output parameter
+        '''
+        sql_connect = cubi.cubi_sql.SQL(server, database)
+        if output.upper() == 'GETRESULTSET':
+            # GetContents of query
+            if output_format.upper() == 'DICTIONARY':
+                return(sql_connect.queryToDictionaryAdmin(full_query, 'GetContents'))
+            elif output_format.upper() == 'DATAFRAME':
+                return(sql_connect.queyToDataframe(full_query))
+            else:
+                print("Don't recognize 'output_format'. Please enter 'Dictionary' or 'Dataframe'")
+            
+        elif output.upper() == 'GETFUNCTION':
+            # CommitQuery
+            sql_connect.queryToDictionaryAdmin(full_query, 'CommitQuery')
+
+        else:
+            print("Don't recognize 'output'. Please enter 'GetResultSet' or 'GetFunction'")
+
+        if output_sql_filepath != None:
+            file_object = open(output_sql_file_path + query_name , 'w')
+            file_object.write(full_query)
+            file_object.close()            
+
+
+        
 
     
     except Exception as ex:
@@ -97,5 +309,12 @@ def query_function(lens = 'NULL', output = 'NULL'):
         pass
 
 
+
 if __name__ == '__main__':
-    query_function()
+    #print(query_variable_search(r'C:\Python34\VirtualEnvs\CUBITest\TheFunction','ACUFunction.sql', 'Y'))
+    query_function(input_sql_file_path = r'C:\Python34\VirtualEnvs\mssql\Projects\TheFunction'
+                   ,input_sql_file_name = 'ACUFunction.sql'
+                   ,lens = ':Members/Names/'
+                   ,output = 'GetFunction'
+                   ,is_temp = True
+                   ,output_sql_file_path = r'C:\Python34\VirtualEnvs\mssql\Projects\TheFunction')
