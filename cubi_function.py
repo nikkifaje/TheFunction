@@ -227,38 +227,28 @@ def query_function(input_sql_file_path
         # Create specified query outputs by dynamically building query header, and footer
         if output.upper() == 'GETRESULTSET':
             for parameter in variables_dictionary:
-                query_header += 'DECLARE {0} {1}\nSET {0} = {2}\n'.format(parameter
-                                                                          ,variables_dictionary[parameter]                                                                          ,'NULL')
+                parameter_value = 'NULL'
+                if parameter == '@Lens':
+                    parameter_value = "'{0}'".format(lens)
+                query_header += '\tDECLARE {0} {1}\n\tSET {0} = {2}\n'.format(parameter
+                                                                          ,variables_dictionary[parameter]
+                                                                          ,parameter_value)
         if output.upper() == 'GETFUNCTION':
             function_variables_string = ''
             for function_number, parameter in enumerate(variables_dictionary):
                 function_comma = ','
+                parameter_value = 'NULL'
                 if function_number == 0:
                     function_comma =''
-                function_variables_string += '{0} {1} {2} = {3}\n'.format(function_comma
+                if parameter == '@Lens':
+                    parameter_value = "'{0}'".format(lens)
+                function_variables_string += '\t{0} {1} {2} = {3}\n'.format(function_comma
                                                                      ,parameter
                                                                      ,variables_dictionary[parameter]
-                                                                     ,'NULL')
-            query_header = '''
-                USE {0}
-                GO
-                SET ANSI_NULLS ON
-                GO
+                                                                     ,parameter_value)
+            query_header = 'CREATE FUNCTION dbo.{0} ( \n\n{1} \n) \n\nRETURNS TABLE \nAS \nRETURN (\n'.format(query_name, function_variables_string)
 
-                SET QUOTED_IDENTIFIER ON
-                GO
-
-                CREATE FUNCTION dbo.{1} (
-                    {2}
-                )
-
-                RETURNS TABLE
-                AS
-                RETURN (
-    
-            '''.format(database, query_name, function_variables_string)
-
-            query_footer = ')\nGO'
+            query_footer = ')'
 
 
 
@@ -268,7 +258,7 @@ def query_function(input_sql_file_path
                 \n--:BEGINMAINQUERY--\n{2}\n--:ENDMAINQUERY--\n
                 \n--:BEGINFOOTER--\n{3}\n--:ENDFOOTER--\n
         '''.format( query_header
-                    ,'' #sql_output_body
+                    ,sql_output_body
                     ,optimized_sql_output_main_query
                     ,query_footer)
 
@@ -280,21 +270,24 @@ def query_function(input_sql_file_path
         if output.upper() == 'GETRESULTSET':
             # GetContents of query
             if output_format.upper() == 'DICTIONARY':
-                return(sql_connect.queryToDictionaryAdmin(full_query, 'GetContents'))
+                pass
+                #return(sql_connect.queryToDictionaryAdmin(full_query, 'GetContents'))
             elif output_format.upper() == 'DATAFRAME':
-                return(sql_connect.queyToDataframe(full_query))
+                pass
+                #return(sql_connect.queyToDataframe(full_query))
             else:
                 print("Don't recognize 'output_format'. Please enter 'Dictionary' or 'Dataframe'")
             
         elif output.upper() == 'GETFUNCTION':
             # CommitQuery
             sql_connect.queryToDictionaryAdmin(full_query, 'CommitQuery')
+            #print(full_query)
 
         else:
             print("Don't recognize 'output'. Please enter 'GetResultSet' or 'GetFunction'")
 
-        if output_sql_filepath != None:
-            file_object = open(output_sql_file_path + query_name , 'w')
+        if output_sql_file_path != None:
+            file_object = open(output_sql_file_path + query_name +'.sql', 'w')
             file_object.write(full_query)
             file_object.close()            
 
@@ -312,9 +305,9 @@ def query_function(input_sql_file_path
 
 if __name__ == '__main__':
     #print(query_variable_search(r'C:\Python34\VirtualEnvs\CUBITest\TheFunction','ACUFunction.sql', 'Y'))
-    query_function(input_sql_file_path = r'C:\Python34\VirtualEnvs\mssql\Projects\TheFunction'
+    query_function(input_sql_file_path = r'C:\Python34\VEnvs\MSSQL\pymssql\Projects\TheFunction'
                    ,input_sql_file_name = 'ACUFunction.sql'
                    ,lens = ':Members/Names/'
                    ,output = 'GetFunction'
                    ,is_temp = True
-                   ,output_sql_file_path = r'C:\Python34\VirtualEnvs\mssql\Projects\TheFunction')
+                   ,output_sql_file_path = r'C:\Python34\VEnvs\MSSQL\pymssql\Projects\TheFunction\\')
