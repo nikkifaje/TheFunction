@@ -252,6 +252,7 @@ def query_function(input_sql_file_path
 
 
 
+        # Compose output query for user use
         full_query =  '''
                 \n--:BEGINHEAD--\n{0}\n--:ENDHEAD--\n
                 \n--:BEGINBODY--\n{1}\n--:ENDBODY--\n
@@ -261,6 +262,7 @@ def query_function(input_sql_file_path
                     ,sql_output_body
                     ,optimized_sql_output_main_query
                     ,query_footer)
+
 
 
         '''
@@ -281,7 +283,25 @@ def query_function(input_sql_file_path
         elif output.upper() == 'GETFUNCTION':
             # CommitQuery
             sql_connect.queryToDictionaryAdmin(full_query, 'CommitQuery')
-            #print(full_query)
+
+            # Build output parameter list to be used in function call for ease of use. Currently mapping just the lens portion, all others are default
+            function_select_parameters_list = []
+            for function_number, parameter in enumerate(variables_dictionary):
+                if parameter == '@Lens':
+                    function_select_parameters_list.append(lens)
+                else:
+                    function_select_parameters_list.append('Default')
+            function_select_parameters_tuple = tuple(function_select_parameters_list)
+                
+            select_function_query = '''
+
+                    SELECT
+                        *
+                    FROM
+                        {0}.dbo.{1}{2}
+            
+            '''.format(database, query_name, function_select_parameters_tuple)
+            return(select_function_query)
 
         else:
             print("Don't recognize 'output'. Please enter 'GetResultSet' or 'GetFunction'")
