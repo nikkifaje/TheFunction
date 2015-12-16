@@ -1,6 +1,7 @@
 import re
 import os
 import datetime
+import sys
 import cubi
 
 #working idea
@@ -129,7 +130,7 @@ def query_function(input_sql_file_path
                    ,output_sql_file_path = None):
     """Doing some fancy string manipulations to Return standardized data for or from SQL."""
 
-    try:
+    try:    
         file = os.path.join(str(input_sql_file_path), str(input_sql_file_name))
         #file_location = r'C:\Python34\VirtualEnvs\CUBITest\TheFunction\ACUFunction.sql'
         read_file_string = open(file).read()
@@ -177,14 +178,16 @@ def query_function(input_sql_file_path
         
         # Build list of available SQL Lens parameters 
         lens_parameters_list = []       ##Use this to display available parameters
-
-        for left_join_group in sql_left_join_list[0:5]:
+        for left_join_group in sql_left_join_list:
             words_list = re.split(r' |\n*', left_join_group)
             for word in words_list:
                 if "'%:" in word:
                     clean_word = re.sub(r"\)|\%|\'|\(", '', word)
-                    lens_parameters_list.append(clean_word)
+                    lens_parameters_list.append(clean_word.title())
         print(lens_parameters_list)
+        #Lens check. Fail if input lens is not in query
+        if lens.title() not in lens_parameters_list:
+            sys.exit('Invalid lens. Exiting program')
         
         lens_list = [lens_set.split('/') for lens_set in lens.split(':')]     #Split input lens parameter and compare appropriate combos to sql parameter
         optimized_sql_output_main_query = sql_left_join_list[0]     #Variable to build the main query outout that occurs after CTE declarations. Variable initialized with the SELECT statement and base table
@@ -197,7 +200,7 @@ def query_function(input_sql_file_path
                 ##Begin to build main query output by commenting unwanted LEFT JOINS according to python lens parameter
                 for left_join_item in sql_left_join_list[1:]:
                     add_sql_join_string = 'LEFT OUTER JOIN' + left_join_item
-                    if lens_item_comparision in left_join_item:
+                    if lens_item_comparision.title() in left_join_item.title():
                         optimized_sql_output_main_query += add_sql_join_string
                     ''' Consider how to add a commented section to output
                     else:
@@ -208,17 +211,23 @@ def query_function(input_sql_file_path
             '''
                     
 
-        # Build unique query name to identify item being used
+
+
+        '''
+        Setup query header
+        '''
+        # Query name. Build unique query name to identify item being used
         dttime = datetime.datetime.now().timetuple()
         time_name = ''
         for n, t in enumerate(dttime[0:7]):
             time_name += str(dttime[n])     ##Build datetime from tuple YYYYMMDDHMMSS
         query_name = re.sub(r'\.sql|\.txt', '', input_sql_file_name) + replace_chars(lens, {'/':'_', ':':'__'}) + '_' + time_name
-
         # Insert TEMP prefix that will enable a deletion process for all temp functions
         if is_temp == True:
             query_name = 'TEMP_'+query_name
-        print(query_name)
+        if output.upper() == 'GETFUNCTION':
+            query_name = 'ufn_'+ query_name
+
 
         # Set up full query shell that will run through specified output workflow
         query_header = ''
@@ -233,6 +242,8 @@ def query_function(input_sql_file_path
                 query_header += '\tDECLARE {0} {1}\n\tSET {0} = {2}\n'.format(parameter
                                                                           ,variables_dictionary[parameter]
                                                                           ,parameter_value)
+            query_header += ';'
+            
         if output.upper() == 'GETFUNCTION':
             function_variables_string = ''
             for function_number, parameter in enumerate(variables_dictionary):
@@ -249,6 +260,7 @@ def query_function(input_sql_file_path
             query_header = 'CREATE FUNCTION dbo.{0} ( \n\n{1} \n) \n\nRETURNS TABLE \nAS \nRETURN (\n'.format(query_name, function_variables_string)
 
             query_footer = ')'
+            
 
 
 
@@ -266,24 +278,29 @@ def query_function(input_sql_file_path
 
 
         '''
-        Execute full_query according to output parameter
+        sql-compiler
+        Execute full_query according to output parameter and build output options
         '''
+        #Create output sql file
+        if output_sql_file_path != None:
+            file_object = open(output_sql_file_path + query_name +'.sql', 'w')
+            file_object.write(full_query)
+            file_object.close() 
+
         sql_connect = cubi.cubi_sql.SQL(server, database)
         if output.upper() == 'GETRESULTSET':
             # GetContents of query
             if output_format.upper() == 'DICTIONARY':
-                pass
-                #return(sql_connect.queryToDictionaryAdmin(full_query, 'GetContents'))
+                return(sql_connect.queryToDictionaryAdmin(full_query, 'GetContents'))
             elif output_format.upper() == 'DATAFRAME':
-                pass
-                #return(sql_connect.queyToDataframe(full_query))
+                return(sql_connect.queryToDataframe(full_query))                
             else:
                 print("Don't recognize 'output_format'. Please enter 'Dictionary' or 'Dataframe'")
             
         elif output.upper() == 'GETFUNCTION':
             # CommitQuery
             sql_connect.queryToDictionaryAdmin(full_query, 'CommitQuery')
-
+            
             # Build output parameter list to be used in function call for ease of use. Currently mapping just the lens portion, all others are default
             function_select_parameters_list = []
             for function_number, parameter in enumerate(variables_dictionary):
@@ -294,22 +311,14 @@ def query_function(input_sql_file_path
             function_select_parameters_tuple = tuple(function_select_parameters_list)
                 
             select_function_query = '''
-
-                    SELECT
-                        *
-                    FROM
-                        {0}.dbo.{1}{2}
-            
+                    \nSELECT \n\t* \nFROM \n\t{0}.dbo.{1}{2}
             '''.format(database, query_name, function_select_parameters_tuple)
             return(select_function_query)
 
         else:
             print("Don't recognize 'output'. Please enter 'GetResultSet' or 'GetFunction'")
 
-        if output_sql_file_path != None:
-            file_object = open(output_sql_file_path + query_name +'.sql', 'w')
-            file_object.write(full_query)
-            file_object.close()            
+           
 
 
         
@@ -325,9 +334,10 @@ def query_function(input_sql_file_path
 
 if __name__ == '__main__':
     #print(query_variable_search(r'C:\Python34\VirtualEnvs\CUBITest\TheFunction','ACUFunction.sql', 'Y'))
-    query_function(input_sql_file_path = r'C:\Python34\VEnvs\MSSQL\pymssql\Projects\TheFunction'
-                   ,input_sql_file_name = 'ACUFunction.sql'
-                   ,lens = ':Members/Names/'
-                   ,output = 'GetFunction'
-                   ,is_temp = True
-                   ,output_sql_file_path = r'C:\Python34\VEnvs\MSSQL\pymssql\Projects\TheFunction\\')
+    #query_function(input_sql_file_path = r'C:\Python34\VEnvs\MSSQL\pymssql\Projects\TheFunction'
+    #               ,input_sql_file_name = 'ACUFunction.sql'
+    #               ,lens = ':Members/Names/'
+    #               ,output = 'GetResultset'
+    #               ,is_temp = True
+    #               ,output_sql_file_path = r'C:\Python34\VEnvs\MSSQL\pymssql\Projects\TheFunction\\')
+    pass
