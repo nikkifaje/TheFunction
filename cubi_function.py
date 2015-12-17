@@ -185,9 +185,12 @@ def query_function(input_sql_file_path
                     clean_word = re.sub(r"\)|\%|\'|\(", '', word)
                     lens_parameters_list.append(clean_word.title())
         print(lens_parameters_list)
+
         #Lens check. Fail if input lens is not in query
-        if lens.title() not in lens_parameters_list:
-            sys.exit('Invalid lens. Exiting program')
+        lens_check_list = lens.split(':')
+        for lens_item in lens_check_list:
+            if len(lens_item) > 0 and ':'+lens_item.title() not in lens_parameters_list:
+                sys.exit("Invalid lens '{0}' . Exiting program".format(':'+lens_item.title()))
         
         lens_list = [lens_set.split('/') for lens_set in lens.split(':')]     #Split input lens parameter and compare appropriate combos to sql parameter
         optimized_sql_output_main_query = sql_left_join_list[0]     #Variable to build the main query outout that occurs after CTE declarations. Variable initialized with the SELECT statement and base table
