@@ -69,14 +69,25 @@ RETURN (
 			,Account.Userchar3 AS 'UniqueID'
 			,Account.Type AS 'AccountType'
 			,RecordTypes.description AS 'AccountTypeDescription'
-			,Account.BRANCH AS 'BranchAssignment'
 			,Account.OpenDate AS 'AccountOpenDate'
 			,Account.CloseDate AS 'AccountCloseDate'
+			,Account.BRANCH AS 'BranchAssignment'
+			,GIS_ACU_Locations.Name AS 'BranchName'
+			,GIS_ACU_Locations.Street AS 'BranchStreet'
+			,GIS_ACU_Locations.City AS 'BranchCity'
+			,GIS_ACU_Locations.State AS 'BranchState'
+			,GIS_ACU_Locations.Zip AS 'BranchZip'
+			,GIS_ACU_Locations.Ext AS 'BranchExt'
+			,GIS_ACU_Locations.Latitude AS 'BranchLatitude' 
+			,GIS_ACU_Locations.Longitude AS 'BranchLongitude'
+			,GIS_ACU_Locations.GeoCodeType AS 'BranchGeoCodeType'
 		FROM
 			SymitarExtracts.dbo.Account
 			LEFT OUTER JOIN SymitarParameters.dbo.RecordTypes
 				ON	Account.Type = RecordTypes.number
 					AND RecordTypes.type = 'ACCOUNTTYPE'
+			LEFT OUTER JOIN BusinessIntelligenceDev.dbo.GIS_ACU_Locations
+				ON Account.Branch = GIS_ACU_Locations.BranchNum
 	),
 
 
@@ -613,7 +624,6 @@ RETURN (
 
 		SELECT
 			ParentAccount AS 'ProductParentAccount'
-			,*
 			,'Share' AS 'ProductType'
 			,Type AS 'ProductTypeNumber'
 			,ID AS 'ProductID'
@@ -1573,61 +1583,61 @@ RETURN (
 		--Member Account and Name Information
 		InitMembersCTE
 
-		--**Not Validated
-		LEFT OUTER JOIN InitMemberContactsCTE
+		
+		LEFT OUTER JOIN InitMemberContactsCTE --**Not Validated
 			ON (@Lens LIKE '%:Members/Contacts/%') 
 				AND InitMembersCTE.ACCOUNTNUMBER = InitMemberContactsCTE.ContactParentAccount
 		
 
-		--**Not Validated
-		LEFT OUTER JOIN InitMembersNameTypesCTE
+		
+		LEFT OUTER JOIN InitMembersNameTypesCTE --**Not Validated
 			ON	(@Lens LIKE '%:Members/Names/%')
 				AND InitMembersCTE.AccountNumber = InitMembersNameTypesCTE.NameTypeParentAccount
 
-			--**Not Validated
-			LEFT OUTER JOIN 
+			
+			LEFT OUTER JOIN  --**Not Validated
 				InitMembersGISLocationCTE
-				ON	(@Lens LIKE '%:Members/Names/GISLocations%')
+				ON	(@Lens LIKE '%:Members/Names/GISLocations/%')
 					AND InitMembersGISLocationCTE.GISParentAccount = InitMembersNameTypesCTE.NameTypeParentAccount
 					AND InitMembersGISLocationCTE.GISNameType = InitMembersNameTypesCTE.NameType		
-			--**Not Validated
-			LEFT OUTER JOIN FlagSSNChargeOffCTE
+			
+			LEFT OUTER JOIN FlagSSNChargeOffCTE --**Not Validated
 				ON	(@Lens LIKE '%:Members/Names/ChargeOffs/%')
 					AND InitMembersNameTypesCTE.NameTypeSSN = FlagSSNChargeOffCTE. ChargeOffSSN
-			--**Not Validated
-			LEFT OUTER JOIN FlagSSNOpenPromoCTE
+			
+			LEFT OUTER JOIN FlagSSNOpenPromoCTE --**Not Validated
 				ON	(@Lens LIKE '%:Members/Names/OpenPromos/%')
 					AND InitMembersNameTypesCTE.NameTypeSSN = FlagSSNOpenPromoCTE.OpenPromoSSN
-			--**Not Validated
-			LEFT OUTER JOIN SSNUnsecuredBalanceCTE
+			
+			LEFT OUTER JOIN SSNUnsecuredBalanceCTE --**Not Validated
 				ON (@Lens LIKE '%:Members/Names/UnsecuredBalances/%')
 					AND InitMembersNameTypesCTE.NameTypeSSN = SSNUnsecuredBalanceCTE.UnsecuredBalanceSSN
-			--**Not Validated
-			LEFT OUTER JOIN FlagSSNLoanModCTE
+			
+			LEFT OUTER JOIN FlagSSNLoanModCTE --**Not Validated
 				ON (@Lens LIKE '%:Members/Names/LoanModifications/%')
 					AND InitMembersNameTypesCTE.NameTypeSSN = FlagSSNLoanModCTE.LoanModSSN
-			--**Not Validated
-			LEFT OUTER JOIN FlagSSNLoanDenialCTE
+			
+			LEFT OUTER JOIN FlagSSNLoanDenialCTE --**Not Validated
 				ON (@Lens LIKE '%:Members/Names/LoanDenials/%')
 					AND InitMembersNameTypesCTE.NameTypeSSN = FlagSSNLoanDenialCTE.LoanDenialSSN
 		
 
 
-		--Member Products Information (Shares and Loans)
-		--**Not Validated
-		LEFT OUTER JOIN InitProductsCTE
+		
+		
+		LEFT OUTER JOIN InitProductsCTE --Member Products Information (Shares and Loans) --**Not Validated
 			ON (@Lens LIKE '%:Members/Products/%')
 				AND InitMembersCTE.AccountNumber = InitProductsCTE.ProductParentAccount
 		
-			--Member Loan Information
-			--**Not Validated
-			LEFT OUTER JOIN InitLoanTrackingsCTE
+			
+			
+			LEFT OUTER JOIN InitLoanTrackingsCTE  --Member Loan Information  --**Not Validated
 				ON	(@Lens LIKE '%:Members/Products/LoanTrackings/%')
 					AND InitProductsCTE.ProductParentAccount = InitLoanTrackingsCTE.LoanTrackingParentAccount
 					AND InitProductsCTE.ProductID = InitLoanTrackingsCTE.LoanTrackingParentID
 					AND InitProductsCTE.ProductType = InitLoanTrackingsCTE.LoanTrackingType
-			--**Not Validated
-			LEFT OUTER JOIN InitLoanTransactionsCTE
+			
+			LEFT OUTER JOIN InitLoanTransactionsCTE --**Not Validated
 				ON	(@Lens LIKE '%:Members/Products/LoanTransactions/%')
 					AND InitProductsCTE.ProductParentAccount = InitLoanTransactionsCTE.LoanTransactionParentAccount 
 					AND InitProductsCTE.ProductID = InitLoanTransactionsCTE.LoanTransactionParentID
@@ -1641,6 +1651,13 @@ RETURN (
 
 
 
+
+
+
+		--:ENDMAINQUERY--
+
+		--:BEGINTESTS--
+		
 		--LEFT OUTER JOIN InitSharesCTE
 		--	ON	(@Lens LIKE '%:Shares/%')
 		--		AND InitMembersCTE.AccountNumber = InitSharesCTE.ShareParentAccount 
@@ -1658,10 +1675,7 @@ RETURN (
 
 
 
-		--:ENDMAINQUERY--
 
-		--:BEGINTESTS--
-		
 
 		----Alternative way is more efficient TrackingRecords
 		----**Not Validated
