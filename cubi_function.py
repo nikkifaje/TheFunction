@@ -75,49 +75,7 @@ def query_variable_search(sql_file_path, sql_file_name, cubi_formatted ='N'):
         pass
 
 
-
-def build_query_item(sql_file_path, sql_file_name):
-    """Return an output item of a query"""
-
-    try:
-        file = os.path.join(str(sql_file_path), str(sql_file_name))
-        #file_location = r'C:\Python34\VirtualEnvs\CUBITest\TheFunction\ACUFunction.sql'
-        read_file_string = open(file).read()
-
-        sql_table_valued_function_variables = None
-        sql_table_valued_function_head = '''
-
-            USE [{0}][EfficiencyDev]
-            GO
-            SET ANSI_NULLS ON
-            GO
-
-            SET QUOTED_IDENTIFIER ON
-            GO
-
-            CREATE FUNCTION [dbo].[{1}][ufn_ArrowheadCU_Members_ALPHA] (
-	        @Lens VARCHAR(50) = 'Init'
-	        ,@StartDate DATE = NULL
-	        ,@EndDate DATE = NULL
-            )
-
-            RETURNS TABLE
-
-            AS
-
-            RETURN (
-        '''.format(1,2)
-            
-        sql_query_file_function = None
-    except:
-        pass
-
-
-
-
-        
-
-
+    
 
 def query_function(input_sql_file_path
                    ,input_sql_file_name
@@ -224,7 +182,7 @@ def query_function(input_sql_file_path
         time_name = ''
         for n, t in enumerate(dttime[0:7]):
             time_name += str(dttime[n])     ##Build datetime from tuple YYYYMMDDHMMSS
-        query_name = re.sub(r'\.sql|\.txt', '', input_sql_file_name) + replace_chars(lens, {'/':'_', ':':'__'}) + '_' + time_name
+        query_name = re.sub(r'\.sql|\.txt', '', input_sql_file_name) + '_' + replace_chars(lens, {'/':'_', ':':'_'}) + '_' + time_name
         # Insert TEMP prefix that will enable a deletion process for all temp functions
         if is_temp == True:
             query_name = 'TEMP_'+query_name
