@@ -633,13 +633,27 @@ RETURN (
 			,Savings.CreatedByUser AS 'ProductCreator'
 			,Savings.OpenDate AS 'ProductOpenDate'
 			,Savings.CloseDate AS 'ProductCloseDate'
+			--Trial Balance seems to only look at chargeoffdate for chargeoff shares
+			,CASE	WHEN	SAVINGS.description LIKE 'C/O -%' 
+							OR SAVINGS.chargeoffdate IS NOT NULL 
+							--OR SAVINGS.chargeofftype <> 0  Need to validate this.
+							OR SAVINGS.type IN (998,999)
+					THEN 1
+					ELSE 0
+			END AS 'ProductChargeOffFlag'
+			,CASE	WHEN	SAVINGS.description LIKE 'P C/O -%'
+							AND SAVINGS.chargeoffdate IS NULL
+							AND SAVINGS.type IN (998,999)
+					THEN 1
+					ELSE 0
+			END AS 'ProductPartialChargeOffFlag'	
 			,NULL AS 'ProductExperianBureauScore'
 			,Savings.Balance AS 'ProductBalance'
 			,Savings.OriginalBalance AS 'ProductOriginalBalance'
 			,Savings.MinimumBalance AS 'ProductMinimumBalance'
 			,Savings.ChargeoffAmount AS 'ProductChargeOffAmount'
-			,Savings.ChargeoffType AS 'LoanChargeOffType'
-			,Savings.ChargeOffDate AS 'LoanChargeOffDate'
+			,Savings.ChargeoffType AS 'ProductChargeOffType'
+			,Savings.ChargeOffDate AS 'ProductChargeOffDate'
 			,NULL AS 'ProductCreditLimit'
 			,NULL AS 'ProductPayment'
 			,NULL AS 'ProductTerm'
@@ -702,6 +716,12 @@ RETURN (
 			,Loan.CREATEDBYUSER AS 'LoanCreator'
 			,Loan.OpenDate AS 'LoanOpenDate'
 			,Loan.CloseDate AS 'LoanCloseDate'
+			,CASE	WHEN	Loan.type IN (999,6999) 
+							OR Loan.chargeoffdate IS NOT NULL
+					THEN 1
+					ELSE 0
+			END AS 'LoanChargeOffFlag'
+			,NULL AS 'LoanPartialChargeOffFlag'
 			,Loan.BureauScore1 AS 'LoanExperianBureauScore'
 			,Loan.BALANCE AS 'LoanBalance'
 			,Loan.OriginalBalance AS 'LoanOriginalBalance'
