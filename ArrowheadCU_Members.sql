@@ -615,8 +615,7 @@ RETURN (
 
 	/*********************************************************
 
-		SHARES AND LOANS
-				What should we call this?
+		Products - SHARES AND LOANS
 
 	*********************************************************/
 
@@ -787,6 +786,116 @@ RETURN (
 
 	),
 
+
+
+	/********************
+	Products Transactions
+	*********************/
+
+	--Initialize Loan Transactions. Unique on ParentAccount, ParentID, PostDate, PostTime, SequenceNumber, Amount
+	InitTransactionsCTE AS (
+
+		SELECT
+				'Share' AS 'TransactionType'
+				,SavingsTransaction.ParentAccount AS 'TransactionParentAccount'
+				,SavingsTransaction.ParentID AS 'TransactionParentID'
+				,SavingsTransaction.ActivityDate AS 'TransactionActivityDate'
+				,SavingsTransaction.LastTranDate AS 'TransactionLastTranDate'
+				,SavingsTransaction.EffectiveDate AS 'TransactionEffectiveDate'
+				,SavingsTransaction.PostDate AS 'TransactionPostDate'
+				,SavingsTransaction.PostTime As 'TransactionPostTime'
+				,SavingsTransaction.Branch AS 'TransactionBranch'
+				,SavingsTransaction.UserNumber AS 'TransactionUserNumber'
+				,SavingsTransaction.UserOverride AS 'TransactionUserOverride'
+				,SavingsTransaction.ProcessorUser AS 'TransactionProcessorUser'
+				,SavingsTransaction.VoidCode AS 'TransactionVoidCode'
+				,ABS(SavingsTransaction.BalanceChange)+SavingsTransaction.INTEREST AS 'TransactionAmount'
+				,SavingsTransaction.BalanceChange AS 'TransactionBalanceChange'
+				,SavingsTransaction.Interest AS 'TransactionInterest'
+				,SavingsTransaction.NewBalance AS 'TransactionNewBalance'
+				,SavingsTransaction.PrevAvailBalance AS 'TransactionPrevAvailBalance'
+				,SavingsTransaction.Description AS 'TransactionDescription'
+				,SavingsTransaction.ActionCode AS 'TransactionActionCode'
+				,TransactionActionCodes.Name As 'TransactionActionCodeName'
+				,SavingsTransaction.SourceCode AS 'TransactionSourceCode'
+				,TransactionSourceCodes.Name AS 'TransactionSourceCodeName'
+				,SavingsTransaction.SequenceNumber AS 'TransactionSequenceNumber'
+				,SavingsTransaction.ConfirmationSeq AS 'TransactionConfirmationSeq'
+				,SavingsTransaction.DraftNumber AS 'TransactionDraftNumber'
+				,SavingsTransaction.TracerNumber AS 'TransactionTracerNumber'
+				,SavingsTransaction.MicrAcctNum AS 'TransactionMicrAcctNum'
+				,SavingsTransaction.CommentCode AS 'TransactionCommentCode'
+				,SavingsTransaction.TransferCode AS 'TransactionTransferCode'
+				,SavingsTransaction.AdjustmentCode AS 'TransactionAdjustmentCode'
+				,SavingsTransaction.RecurringTran AS 'TransactionRecurringTran'
+				,SavingsTransaction.FeeCountBy AS 'TransactionFeeCountBy'
+				,CASE	WHEN	SavingsTransaction.SourceCode IN ('G', 'O')
+								OR (SavingsTransaction.SourceCode = 'B' 
+									AND SavingsTransaction.Description IS NOT NULL)
+						THEN 1
+						ELSE 0
+				END AS 'CardTransactionFlag'		--Debit card transactions not including ATM transactions
+			FROM
+				SymitarExtracts.dbo.SavingsTransaction
+				LEFT OUTER JOIN SymitarParameters.dbo.TransactionSourceCodes
+					ON SavingsTransaction.Sourcecode = TransactionSourceCodes.Code
+				LEFT OUTER JOIN SymitarParameters.dbo.TransactionActionCodes
+					ON SavingsTransaction.ActionCode = TransactionActionCodes.Code
+			--WHERE 
+			--	( (@StartDate IS NULL AND SavingsTransaction.Postdate >= CONVERT(DATE,GETDATE()-1)) 
+			--		OR (@StartDate IS NOT NULL AND SavingsTransaction.POSTDATE >= @StartDate))
+
+
+				UNION
+
+
+			SELECT
+				'Loan' AS 'LoanTransactionType'
+				,LoanTransaction.ParentAccount AS 'LoanTransactionParentAccount'
+				,LoanTransaction.ParentID AS 'LoanTransactionParentID'
+				,LoanTransaction.ActivityDate AS 'TransactionActivityDate'
+				,LoanTransaction.LastTranDate AS 'TransactionLastTranDate'
+				,LoanTransaction.EffectiveDate AS 'TransactionEffectiveDate'
+				,LoanTransaction.PostDate AS 'TransactionPostDate'
+				,LoanTransaction.PostTime As 'TransactionPostTime'
+				,LoanTransaction.Branch AS 'TransactionBranch'
+				,LoanTransaction.UserNumber AS 'TransactionUserNumber'
+				,LoanTransaction.UserOverride AS 'TransactionUserOverride'
+				,LoanTransaction.ProcessorUser AS 'TransactionProcessorUser'
+				,LoanTransaction.VoidCode AS 'TransactionVoidCode'
+				,ABS(LoanTransaction.BalanceChange)+LoanTransaction.INTEREST AS 'TransactionAmount'
+				,LoanTransaction.BalanceChange AS 'TransactionBalanceChange'
+				,LoanTransaction.Interest AS 'TransactionInterest'
+				,LoanTransaction.NewBalance AS 'TransactionNewBalance'
+				,LoanTransaction.PrevAvailBalance AS 'TransactionPrevAvailBalance'
+				,LoanTransaction.Description AS 'TransactionDescription'
+				,LoanTransaction.ActionCode AS 'TransactionActionCode'
+				,TransactionActionCodes.Name As 'TransactionActionCodeName'
+				,LoanTransaction.SourceCode AS 'TransactionSourceCode'
+				,TransactionSourceCodes.Name AS 'TransactionSourceCodeName'
+				,LoanTransaction.SequenceNumber AS 'TransactionSequenceNumber'
+				,LoanTransaction.ConfirmationSeq AS 'TransactionConfirmationSeq'
+				,LoanTransaction.DraftNumber AS 'TransactionDraftNumber'
+				,LoanTransaction.TracerNumber AS 'TransactionTracerNumber'
+				,LoanTransaction.MicrAcctNum AS 'TransactionMicrAcctNum'
+				,LoanTransaction.CommentCode AS 'TransactionCommentCode'
+				,LoanTransaction.TransferCode AS 'TransactionTransferCode'
+				,LoanTransaction.AdjustmentCode AS 'TransactionAdjustmentCode'
+				,LoanTransaction.RecurringTran AS 'TransactionRecurringTran'
+				,LoanTransaction.FeeCountBy AS 'TransactionFeeCountBy'
+				,NULL AS 'CardTransaction'
+			FROM
+				SymitarExtracts.dbo.LoanTransaction
+				LEFT OUTER JOIN SymitarParameters.dbo.TransactionSourceCodes
+					ON LoanTransaction.Sourcecode = TransactionSourceCodes.Code
+				LEFT OUTER JOIN SymitarParameters.dbo.TransactionActionCodes
+					ON LoanTransaction.ActionCode = TransactionActionCodes.Code
+			--WHERE 
+			--	( (@StartDate IS NULL AND LoanTransaction.Postdate >= CONVERT(DATE,GETDATE()-1)) 
+			--		OR (@StartDate IS NOT NULL AND LoanTransaction.POSTDATE >= @StartDate))
+	
+	),
+
 	/*********************************************************
 
 		SHARES --Consider removing for above
@@ -807,8 +916,6 @@ RETURN (
 
 	),
 	
-
-
 
 
 
@@ -1012,53 +1119,7 @@ RETURN (
 		),
 
 
-	/********************
-		Loan Transactions
-	*********************/
 
-		--Initialize Loan Transactions. Unique on ParentAccount, ParentID, PostDate, PostTime, SequenceNumber, Amount
-		InitLoanTransactionsCTE AS (
-
-			SELECT
-				'Loan' AS 'LoanTransactionType'
-				,LoanTransaction.ParentAccount AS 'LoanTransactionParentAccount'
-				,LoanTransaction.ParentID AS 'LoanTransactionParentID'
-				,LoanTransaction.ActivityDate AS 'TransactionActivityDate'
-				,LoanTransaction.LastTranDate AS 'TransactionLastTranDate'
-				,LoanTransaction.EffectiveDate AS 'TransactionEffectiveDate'
-				,LoanTransaction.PostDate AS 'TransactionPostDate'
-				,LoanTransaction.PostTime As 'TransactionPostTime'
-				,LoanTransaction.Branch AS 'TransactionBranch'
-				,LoanTransaction.UserNumber AS 'TransactionUserNumber'
-				,LoanTransaction.UserOverride AS 'TransactionUserOverride'
-				,LoanTransaction.ProcessorUser AS 'TransactionProcessorUser'
-				,ABS(LoanTransaction.BalanceChange)+LoanTransaction.INTEREST AS 'TransactionAmount'
-				,LoanTransaction.BalanceChange AS 'TransactionBalanceChange'
-				,LoanTransaction.Interest AS 'TransactionInterest'
-				,LoanTransaction.NewBalance AS 'TransactionNewBalance'
-				,LoanTransaction.PrevAvailBalance AS 'TransactionPrevAvailBalance'
-				,LoanTransaction.Description AS 'TransactionDescription'
-				,LoanTransaction.SequenceNumber AS 'TransactionSequenceNumber'
-				,LoanTransaction.ConfirmationSeq AS 'TransactionConfirmationSeq'
-				,LoanTransaction.DraftNumber AS 'TransactionDraftNumber'
-				,LoanTransaction.TracerNumber AS 'TransactionTracerNumber'
-				,LoanTransaction.MicrAcctNum AS 'TransactionMicrAcctNum'
-				,LoanTransaction.ActionCode AS 'TransactionActionCode'
-				,LoanTransaction.CommentCode AS 'TransactionCommentCode'
-				,LoanTransaction.TransferCode AS 'TransactionTransferCode'
-				,LoanTransaction.AdjustmentCode AS 'TransactionAdjustmentCode'
-				,LoanTransaction.SourceCode AS 'TransactionSourceCode'
-				,LoanTransaction.RecurringTran AS 'TransactionRecurringTran'
-				,LoanTransaction.FeeCountBy AS 'TransactionFeeCountBy'
-			FROM
-				SymitarExtracts.dbo.LoanTransaction
-			WHERE 
-				COMMENTCODE = 0
-				AND ( (@StartDate IS NULL AND Postdate >= CONVERT(DATE,GETDATE()-1)) 
-					OR (@StartDate IS NOT NULL AND POSTDATE >= @StartDate))
-				--AND (@Lens LIKE '%:Loans/Transactions/%')
-
-		),
 
 
 
@@ -1648,6 +1709,12 @@ RETURN (
 		LEFT OUTER JOIN InitProductsCTE --Member Products Information (Shares and Loans) --**Not Validated
 			ON (@Lens LIKE '%:Members/Products/%')
 				AND InitMembersCTE.AccountNumber = InitProductsCTE.ProductParentAccount
+
+			LEFT OUTER JOIN InitTransactionsCTE	--All products transactions --**Not Validated
+				ON (@Lens LIKE '%:Members/Products/Transactions/%')
+					AND InitProductsCTE.ProductParentAccount = InitTransactionsCTE.TransactionParentAccount 
+					AND InitProductsCTE.ProductID = InitTransactionsCTE.TransactionParentID
+					AND InitProductsCTE.ProductType = InitTransactionsCTE.TransactionType
 		
 			
 			
@@ -1657,11 +1724,6 @@ RETURN (
 					AND InitProductsCTE.ProductID = InitLoanTrackingsCTE.LoanTrackingParentID
 					AND InitProductsCTE.ProductType = InitLoanTrackingsCTE.LoanTrackingType
 			
-			LEFT OUTER JOIN InitLoanTransactionsCTE --**Not Validated
-				ON	(@Lens LIKE '%:Members/Products/LoanTransactions/%')
-					AND InitProductsCTE.ProductParentAccount = InitLoanTransactionsCTE.LoanTransactionParentAccount 
-					AND InitProductsCTE.ProductID = InitLoanTransactionsCTE.LoanTransactionParentID
-					AND InitProductsCTE.ProductType = InitLoanTransactionsCTE.LoanTransactionType
 
 
 
