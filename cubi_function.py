@@ -269,11 +269,17 @@ def query_function(input_sql_file_path
                     function_select_parameters_list.append(lens)
                 else:
                     function_select_parameters_list.append('Default')
-            function_select_parameters_tuple = tuple(function_select_parameters_list)
+
+            #Build Select statement to call Table valued Function in SQL. Extra logic to properly format output to avoid SQL errors
+            function_select_parameters_item = ''
+            if len(function_select_parameters_list) == 1:
+                function_select_parameters_item = "('{0}')".format(function_select_parameters_list[0])
+            else:
+                function_select_parameters_tuple = tuple(function_select_parameters_list)
                 
             select_function_query = '''
                     \nSELECT \n\t* \nFROM \n\t{0}.dbo.{1}{2}
-            '''.format(database, query_name, function_select_parameters_tuple)
+            '''.format(database, query_name, function_select_parameters_item)
             return(select_function_query)
 
         else:
