@@ -14,9 +14,7 @@ GO
 
 CREATE FUNCTION [dbo].[ufn_ArrowheadCU_Members_ALPHA] (
 	
-	@Lens VARCHAR(50) = 'Init'
-	,@StartDate DATE = NULL
-	,@EndDate DATE = NULL
+	@Lens VARCHAR(MAX) = 'Init'
 
 )
 
@@ -70,7 +68,33 @@ RETURN (
 			,Account.Type AS 'AccountType'
 			,RecordTypes.description AS 'AccountTypeDescription'
 			,Account.OpenDate AS 'AccountOpenDate'
+			,DATEDIFF(yy, Account.OpenDate, GETDATE()) AS 'AccountOpenedYearsAgo'
 			,Account.CloseDate AS 'AccountCloseDate'
+			,DATEDIFF(yy, Account.CloseDate, GETDATE()) AS 'AccountClosedYearsAgo'
+			,CASE	WHEN	Account.CloseDate IS NOT NULL
+					THEN DATEDIFF(mm, Account.OpenDate, Account.CloseDate)
+					ELSE DATEDIFF(mm, Account.OpenDate, GETDATE())
+			END AS 'AccountMonthsOpened'
+			,CASE	WHEN CloseDate IS NULL
+					THEN 0
+					ELSE 1
+			END AS 'AccountCloseFlag'
+			,CASE	WHEN DATEDIFF(dd, Account.OpenDate, Account.CloseDate) <= 3
+					THEN 1
+					ELSE 0
+			END AS 'AccountPrematureCloseFlag'
+			,CASE	WHEN Account.Type = 9999
+					THEN 1
+					ELSE 0
+			END AS 'AccountChargeOffFlag'
+			--,CASE	WHEN DATEDIFF(yy, Account.OpenDate, GETDATE()) = 1
+			--		THEN 1
+			--		ELSE 0
+			--END AS 'AccountOpenedLastYearFlag'
+			--,CASE	WHEN DATEDIFF(yy, Account.OpenDate, GETDATE()) = 0
+			--		THEN 1
+			--		ELSE 0
+			--END AS 'AccountOpenedCurrentYearFlag'
 			,Account.BRANCH AS 'BranchAssignment'
 			,GIS_ACU_Locations.Name AS 'BranchName'
 			,GIS_ACU_Locations.Street AS 'BranchStreet'
@@ -377,6 +401,10 @@ RETURN (
 				SELECT
 					[GISLocationID] AS 'GISLocationID'
 					,[ParentAccount] AS 'GISParentAccount'
+					,CASE	WHEN [geocode_datetime] = MAX([geocode_datetime]) OVER (PARTITION BY ParentAccount )
+							THEN 1
+							ELSE 0
+					END AS 'GISActiveLocationFlag'
 					,[geocode_datetime] AS 'GISGeoCodeDatetime'
 					,[full_address] AS 'GISFullAddress'
 					,[address_type] AS 'GISNameType'
@@ -408,7 +436,7 @@ RETURN (
 					,Name.Ordinal AS 'NameTypeOrdinal'
 					,Name.Locator AS 'NameTypeLocator'
 					,Name.EXPIRATIONDATE AS 'NameTypeExpiration'
-					,Name.LASTADDRCHGDATE AS 'NameTypeAddressChangeDate'
+					,Name.ADDRRECORDCHANGEDATE AS 'NameTypeAddressChangeDate'
 					,Name.MAILOVERRIDE AS 'NameTypeMailOverride'
 					,Name.SSNTYPE AS 'NameTypeSSNType'
 					,Name.SSN AS 'NameTypeSSN'
@@ -619,6 +647,70 @@ RETURN (
 
 	*********************************************************/
 
+		ExperianFICOCTE (PromoID, SSN, UniqueID, FICO, TIERLEVEL) as (
+       
+			SELECT DISTINCT
+				Events_Promotions.PromoID
+				,Promotions_ExperianExtracts.SSN
+				,Promotions_ExperianExtracts.UniqueID
+				,Promotions_ExperianExtracts.FICO_V30A_Prscrn_Score_Value
+				,Promotions_Details.TierLevel
+			FROM 
+				BusinessIntelligenceDev.dbo.Promotions_ExperianExtracts
+				LEFT OUTER JOIN BusinessIntelligenceDev.dbo.Events_Promotions 
+					ON Events_Promotions.PrescreenID = Promotions_ExperianExtracts.PrescreenID
+				LEFT OUTER JOIN BusinessIntelligenceDev.dbo.Promotions_Details
+					ON	Promotions_ExperianExtracts.FICO_V30A_Prscrn_Score_Value BETWEEN Promotions_Details.FICOMin AND Promotions_Details.FICOMax 
+						and Promotions_Details.PromoID = Events_Promotions.PromoID
+			WHERE
+				Promotions_ExperianExtracts.SSN IS NOT NULL
+		
+		),
+
+		-- Funded Tier Level based on promo details
+		FundedTierCTE (PromoID, LoanType, TierLevel) as (
+       
+			SELECT
+				PromoID
+				,LoanType
+				,TierLevel
+			FROM
+				BusinessIntelligenceDev.dbo.Promotions_Details
+			GROUP BY
+				PromoID
+				,LoanType
+				,TierLevel
+		),
+
+		
+		InitProductTierLevelCTE AS (
+			SELECT
+				l.PARENTACCOUNT AS 'ProductTierLevelParentAccount'
+				,l.ID AS 'ProductTierLevelProductID'
+				,ft.TierLevel AS 'ProductTierLevelFundedTier'
+				,ef.TIERLEVEL AS 'ProductTierLevelExperianTier'
+				,FicoTiersGrouped.TierNumber AS 'ProductTierLevelBureauTier'
+				,COALESCE(ft.TierLevel, ef.TIERLEVEL, FicoTiersGrouped.TierNumber) AS 'ProductTierLevel'
+			FROM
+				SymitarExtracts.dbo.LOAN l
+				LEFT OUTER JOIN SymitarExtracts.dbo.loantracking lt
+					ON	l.PARENTACCOUNT = lt.PARENTACCOUNT 
+						AND lt.PARENTID = l.ID 
+						AND lt.type = 35
+				LEFT OUTER JOIN SymitarExtracts.dbo.NAME n 
+					ON	n.PARENTACCOUNT = l.PARENTACCOUNT 
+						AND n.TYPE = 0
+				LEFT OUTER JOIN ExperianFICOCTE ef 
+					 ON	ef.SSN = n.SSN 
+						and ef.PromoID = LT.USERCHAR10
+				LEFT OUTER JOIN FundedTierCTE ft 
+					 ON	ft.PromoID = LT.USERCHAR10 
+						AND ft.LoanType = l.TYPE
+				LEFT OUTER JOIN Efficiency.dbo.FicoTiersGrouped
+					ON	l.BUREAUSCORE1 BETWEEN FicoTiersGrouped.MinFICO AND FicoTiersGrouped.MaxFICO
+						AND FicoTiersGrouped.ActiveFlag = 1
+		),
+
 	InitProductsCTE AS (
 
 		SELECT
@@ -631,7 +723,21 @@ RETURN (
 			,Savings.Branch AS 'ProductBranch'
 			,Savings.CreatedByUser AS 'ProductCreator'
 			,Savings.OpenDate AS 'ProductOpenDate'
+			,DATEDIFF(yy, Savings.OpenDate, GETDATE()) AS 'ProductOpenedYearsAgo'
 			,Savings.CloseDate AS 'ProductCloseDate'
+			,DATEDIFF(yy, Savings.CloseDate, GETDATE()) AS 'ProductClosedYearsAgo'
+			,CASE	WHEN Savings.CloseDate IS NOT NULL
+					THEN DATEDIFF(mm, Savings.OpenDate, Savings.CloseDate)
+					ELSE DATEDIFF(mm, Savings.OpenDate, GETDATE())
+			END AS 'ProductMonthsOpened'
+			,CASE	WHEN Savings.CloseDate IS NULL
+					THEN 0
+					ELSE 1
+			END AS 'ProductCloseFlag'
+			,CASE	WHEN DATEDIFF(dd, Savings.OpenDate, Savings.CloseDate) <= 3
+					THEN 1
+					ELSE 0
+			END AS 'ProductPrematureCloseFlag'
 			--Trial Balance seems to only look at chargeoffdate for chargeoff shares
 			,CASE	WHEN	SAVINGS.description LIKE 'C/O -%' 
 							OR SAVINGS.chargeoffdate IS NOT NULL 
@@ -645,7 +751,16 @@ RETURN (
 							AND SAVINGS.type IN (998,999)
 					THEN 1
 					ELSE 0
-			END AS 'ProductPartialChargeOffFlag'	
+			END AS 'ProductPartialChargeOffFlag'
+			
+			--,CASE	WHEN DATEDIFF(yy, Savings.OpenDate, GETDATE()) = 1
+			--		THEN 1
+			--		ELSE 0
+			--END AS 'ProductOpenedLastYearFlag'
+			--,CASE	WHEN DATEDIFF(yy, Savings.OpenDate, GETDATE()) = 0
+			--		THEN 1
+			--		ELSE 0
+			--END AS 'ProductOpenedCurrentYearFlag'		
 			,NULL AS 'ProductExperianBureauScore'
 			,Savings.Balance AS 'ProductBalance'
 			,Savings.OriginalBalance AS 'ProductOriginalBalance'
@@ -714,13 +829,35 @@ RETURN (
 			,Loan.Branch AS 'LoanBranch'
 			,Loan.CREATEDBYUSER AS 'LoanCreator'
 			,Loan.OpenDate AS 'LoanOpenDate'
+			,DATEDIFF(yy, Loan.OpenDate, GETDATE()) AS 'LoanOpenedYearsAgo'
 			,Loan.CloseDate AS 'LoanCloseDate'
+			,DATEDIFF(yy, Loan.CloseDate, GETDATE()) AS 'LoanClosedYearsAgo'
+			,CASE	WHEN Loan.CloseDate IS NOT NULL
+					THEN DATEDIFF(mm, Loan.OpenDate, Loan.CloseDate)
+					ELSE DATEDIFF(mm, Loan.OpenDate, GETDATE())
+			END AS 'LoanMonthsOpened'
+			,CASE	WHEN Loan.CloseDate IS NULL
+					THEN 0
+					ELSE 1
+			END AS 'ProductCloseFlag'
+			,CASE	WHEN DATEDIFF(dd, Loan.OpenDate, Loan.CloseDate) <= 3
+					THEN 1
+					ELSE 0
+			END AS 'LoanPrematureCloseFlag'
 			,CASE	WHEN	Loan.type IN (999,6999) 
 							OR Loan.chargeoffdate IS NOT NULL
 					THEN 1
 					ELSE 0
 			END AS 'LoanChargeOffFlag'
 			,NULL AS 'LoanPartialChargeOffFlag'
+			--,CASE	WHEN DATEDIFF(yy, Loan.OpenDate, GETDATE()) = 1
+			--		THEN 1
+			--		ELSE 0
+			--END AS 'LoanOpenedLastYearFlag'
+			--,CASE	WHEN DATEDIFF(yy, Loan.OpenDate, GETDATE()) = 0
+			--		THEN 1
+			--		ELSE 0
+			--END AS 'LoanOpenedCurrentYearFlag'	
 			,Loan.BureauScore1 AS 'LoanExperianBureauScore'
 			,Loan.BALANCE AS 'LoanBalance'
 			,Loan.OriginalBalance AS 'LoanOriginalBalance'
@@ -1709,6 +1846,11 @@ RETURN (
 		LEFT OUTER JOIN InitProductsCTE --Member Products Information (Shares and Loans) --**Not Validated
 			ON (@Lens LIKE '%:Members/Products/%')
 				AND InitMembersCTE.AccountNumber = InitProductsCTE.ProductParentAccount
+			
+			LEFT OUTER JOIN InitProductTierLevelCTE	--Member Products TierLevel **Not Validated
+				ON (@Lens LIKE '%:Members/Products/TierLevels/%')
+					AND InitProductTierLevelCTE.ProductTierLevelParentAccount = InitProductsCTE.ProductParentAccount
+					AND InitProductTierLevelCTE.ProductTierLevelProductID = InitProductsCTE.ProductID
 
 			LEFT OUTER JOIN InitTransactionsCTE	--All products transactions --**Not Validated
 				ON (@Lens LIKE '%:Members/Products/Transactions/%')
