@@ -683,7 +683,7 @@ RETURN (
 		),
 
 		
-		InitProductTierLevelCTE AS (
+		InitProductsTierLevelsCTE AS (
 			SELECT
 				l.PARENTACCOUNT AS 'ProductTierLevelParentAccount'
 				,l.ID AS 'ProductTierLevelProductID'
@@ -804,6 +804,7 @@ RETURN (
 			,NULL AS 'ProductServiceClassMCIF'
 			,NULL AS 'ProductApplicableScorecard'
 			,NULL AS 'ProductIndirect'
+			,NULL AS 'ProductLOCFlag'
 			,NULL AS 'ProductSecured'
 			,NULL AS 'ProductFixedRate'
 			,NULL AS 'ProductMixedTiers'
@@ -901,6 +902,7 @@ RETURN (
 			,LoanTypes.ServiceClassMCIF
 			,LoanTypes.ApplicableScorecard
 			,LoanTypes.Indirect
+			,DimLoanProduct.IsLOC
 			,LoanTypes.Secured
 			,LoanTypes.FixedRate
 			,LoanTypes.MixedTiers
@@ -930,7 +932,7 @@ RETURN (
 	*********************/
 
 	--Initialize Loan Transactions. Unique on ParentAccount, ParentID, PostDate, PostTime, SequenceNumber, Amount
-	InitTransactionsCTE AS (
+	InitProductsTransactionsCTE AS (
 
 		SELECT
 				'Share' AS 'TransactionType'
@@ -966,12 +968,16 @@ RETURN (
 				,SavingsTransaction.AdjustmentCode AS 'TransactionAdjustmentCode'
 				,SavingsTransaction.RecurringTran AS 'TransactionRecurringTran'
 				,SavingsTransaction.FeeCountBy AS 'TransactionFeeCountBy'
-				,CASE	WHEN	SavingsTransaction.SourceCode IN ('G', 'O')
+				,CASE	WHEN	SavingsTransaction.SourceCode IN ('A', 'G', 'O')
 								OR (SavingsTransaction.SourceCode = 'B' 
 									AND SavingsTransaction.Description IS NOT NULL)
 						THEN 1
 						ELSE 0
-				END AS 'CardTransactionFlag'		--Debit card transactions not including ATM transactions
+				END AS 'TransactionCardTransactionFlag'		--Debit card transactions not including ATM transactions
+				,CASE	WHEN SourceCode = 'F'
+						THEN BalanceChange
+						ELSE NULL
+				END AS 'TransactionFeeAmount'
 			FROM
 				SymitarExtracts.dbo.SavingsTransaction
 				LEFT OUTER JOIN SymitarParameters.dbo.TransactionSourceCodes
@@ -1020,7 +1026,16 @@ RETURN (
 				,LoanTransaction.AdjustmentCode AS 'TransactionAdjustmentCode'
 				,LoanTransaction.RecurringTran AS 'TransactionRecurringTran'
 				,LoanTransaction.FeeCountBy AS 'TransactionFeeCountBy'
-				,NULL AS 'CardTransaction'
+				,CASE	WHEN LoanTransaction.SourceCode IN ('A', 'G') 
+						THEN 1
+						ELSE 0
+				END AS 'CardTransaction'
+				,CASE	WHEN LoanTransaction.SourceCode = 'F'
+							THEN -LoanTransaction.BalanceChange
+						WHEN LoanTransaction.FeeAmount <> 0
+							THEN -LoanTransaction.FeeAmount
+						ELSE NULL
+				END AS 'LoanTransactionFeeAmount'
 			FROM
 				SymitarExtracts.dbo.LoanTransaction
 				LEFT OUTER JOIN SymitarParameters.dbo.TransactionSourceCodes
@@ -1033,6 +1048,48 @@ RETURN (
 	
 	),
 
+	
+		/********************
+		GL Card Interchange
+		*********************/
+		--Results built from transaction information but is unique by year - month (CardInterchangeDateKey)
+		ProductsInterchangesCTE  AS (
+
+			SELECT DISTINCT
+				InitProductsTransactionsCTE.TransactionType AS 'ProductInterchangeProductType'
+				,InitProductsTransactionsCTE.TransactionParentAccount AS 'ProductInterchangeParentAccount'
+				,InitProductsTransactionsCTE.TransactionParentID AS 'ProductInterchangeParentID'
+				,CONCAT(YEAR(InitProductsTransactionsCTE.TransactionPostDate),'-', MONTH(InitProductsTransactionsCTE.TransactionPostDate)) AS 'ProductInterchangeDateKey'
+				,YEAR(InitProductsTransactionsCTE.TransactionPostDate) AS 'ProductInterchangeYear'
+				,MONTH(InitProductsTransactionsCTE.TransactionPostDate) AS 'ProductInterchangeMonth'
+				,SUM(TransactionCardTransactionFlag) OVER (PARTITION BY InitProductsTransactionsCTE.TransactionType, YEAR(InitProductsTransactionsCTE.TransactionPostDate), MONTH(InitProductsTransactionsCTE.TransactionPostDate)) AS 'ProductInterchangeTotalMonthTransactionCount'
+				,GLHistory.Amount AS 'ProductInterchangeMonthAmount'
+				,CASE	WHEN SUM(TransactionCardTransactionFlag) OVER (PARTITION BY InitProductsTransactionsCTE.TransactionType, YEAR(InitProductsTransactionsCTE.TransactionPostDate), MONTH(InitProductsTransactionsCTE.TransactionPostDate)) > 0
+						THEN GLHistory.Amount/ SUM(TransactionCardTransactionFlag) OVER (PARTITION BY InitProductsTransactionsCTE.TransactionType, YEAR(InitProductsTransactionsCTE.TransactionPostDate), MONTH(InitProductsTransactionsCTE.TransactionPostDate)) 
+						ELSE 0
+				END AS 'ProductInterchangeMonthAmountPerTransaction'
+				,SUM(TransactionCardTransactionFlag) OVER (PARTITION  BY InitProductsTransactionsCTE.TransactionType, InitProductsTransactionsCTE.TransactionParentAccount, InitProductsTransactionsCTE.TransactionParentID, YEAR(InitProductsTransactionsCTE.TransactionPostDate), MONTH(InitProductsTransactionsCTE.TransactionPostDate)) AS 'ProductInterchangeProductMonthTransactionCount'
+				,(CASE	WHEN SUM(TransactionCardTransactionFlag) OVER (PARTITION BY InitProductsTransactionsCTE.TransactionType, YEAR(InitProductsTransactionsCTE.TransactionPostDate), MONTH(InitProductsTransactionsCTE.TransactionPostDate)) > 0
+						THEN GLHistory.Amount/ SUM(TransactionCardTransactionFlag) OVER (PARTITION BY InitProductsTransactionsCTE.TransactionType, YEAR(InitProductsTransactionsCTE.TransactionPostDate), MONTH(InitProductsTransactionsCTE.TransactionPostDate)) 
+						ELSE 0
+				END) * SUM(TransactionCardTransactionFlag) OVER (PARTITION  BY InitProductsTransactionsCTE.TransactionType, InitProductsTransactionsCTE.TransactionParentAccount, InitProductsTransactionsCTE.TransactionParentID, YEAR(InitProductsTransactionsCTE.TransactionPostDate), MONTH(InitProductsTransactionsCTE.TransactionPostDate)) AS 'ProductInterchangeProductMonthAmount'
+		
+				--,InitTransactionsCTE.* 
+			FROM
+				InitProductsTransactionsCTE
+				LEFT OUTER JOIN SymitarExtracts.dbo.GLHistory
+					ON	MONTH(GLHistory.EFFECTIVEDATE) = MONTH(InitProductsTransactionsCTE.TransactionPostDate)
+						AND YEAR(GLHistory.EFFECTIVEDATE) = YEAR(InitProductsTransactionsCTE.TransactionPostDate)
+						AND GLHistory.DebitCreditCode = 2
+						AND (	(InitProductsTransactionsCTE.TransactionType = 'Share'
+									AND  GLHistory.ParentGLAccount LIKE '15201100000090')
+								OR 
+								(InitProductsTransactionsCTE.TransactionType = 'Loan'			
+									AND GLHistory.ParentGLAccount LIKE '15201200000090')
+					)
+		),
+	
+	
 	/*********************************************************
 
 		SHARES --Consider removing for above
@@ -1847,17 +1904,22 @@ RETURN (
 			ON (@Lens LIKE '%:Members/Products/%')
 				AND InitMembersCTE.AccountNumber = InitProductsCTE.ProductParentAccount
 			
-			LEFT OUTER JOIN InitProductTierLevelCTE	--Member Products TierLevel **Not Validated
+			LEFT OUTER JOIN InitProductsTierLevelsCTE	--Member Products TierLevel **Not Validated
 				ON (@Lens LIKE '%:Members/Products/TierLevels/%')
-					AND InitProductTierLevelCTE.ProductTierLevelParentAccount = InitProductsCTE.ProductParentAccount
-					AND InitProductTierLevelCTE.ProductTierLevelProductID = InitProductsCTE.ProductID
+					AND InitProductsTierLevelsCTE.ProductTierLevelParentAccount = InitProductsCTE.ProductParentAccount
+					AND InitProductsTierLevelsCTE.ProductTierLevelProductID = InitProductsCTE.ProductID
 
-			LEFT OUTER JOIN InitTransactionsCTE	--All products transactions --**Not Validated
+			LEFT OUTER JOIN InitProductsTransactionsCTE	--All products transactions --**Not Validated
 				ON (@Lens LIKE '%:Members/Products/Transactions/%')
-					AND InitProductsCTE.ProductParentAccount = InitTransactionsCTE.TransactionParentAccount 
-					AND InitProductsCTE.ProductID = InitTransactionsCTE.TransactionParentID
-					AND InitProductsCTE.ProductType = InitTransactionsCTE.TransactionType
-		
+					AND InitProductsCTE.ProductParentAccount = InitProductsTransactionsCTE.TransactionParentAccount 
+					AND InitProductsCTE.ProductID = InitProductsTransactionsCTE.TransactionParentID
+					AND InitProductsCTE.ProductType = InitProductsTransactionsCTE.TransactionType
+
+			LEFT OUTER JOIN ProductsInterchangesCTE
+				ON (@Lens LIKE '%:Members/Products/MonthsInterchanges/%')
+					AND InitProductsCTE.ProductParentAccount = ProductsInterchangesCTE.ProductInterchangeParentAccount 
+					AND InitProductsCTE.ProductID = ProductsInterchangesCTE.ProductInterchangeParentID
+					AND InitProductsCTE.ProductType = ProductsInterchangesCTE.ProductInterchangeProductType
 			
 			
 			LEFT OUTER JOIN InitLoanTrackingsCTE  --Member Loan Information  --**Not Validated
