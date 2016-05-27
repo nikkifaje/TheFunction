@@ -687,6 +687,7 @@ RETURN (
 			SELECT
 				l.PARENTACCOUNT AS 'ProductTierLevelParentAccount'
 				,l.ID AS 'ProductTierLevelProductID'
+				,l.BUREAUSCORE1 as 'ProductTierLevelExperianScore'
 				,ft.TierLevel AS 'ProductTierLevelFundedTier'
 				,ef.TIERLEVEL AS 'ProductTierLevelExperianTier'
 				,FicoTiersGrouped.TierNumber AS 'ProductTierLevelBureauTier'
